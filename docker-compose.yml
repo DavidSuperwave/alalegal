@@ -48,6 +48,7 @@ services:
       AGENT_SOUL_PATH: /app/SOUL.md
       AGENT_NAME: "Asistente Superwave"
       TIMEZONE: America/Monterrey
+      CLI_ENABLED: "false"
       GATEWAY_ENABLED: true
       GATEWAY_HOST: 0.0.0.0
       GATEWAY_PORT: 3000
@@ -67,7 +68,7 @@ services:
     ports:
       - "3000:3000"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
