@@ -1,0 +1,120 @@
+# ============================================================
+# Superwave Agent — Docker Compose
+# 4 services: db, agent, bridge, web
+# ============================================================
+# Usage:
+#   cp .env.example .env
+#   docker compose up -d --build
+# ============================================================
+
+version: "3.9"
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  db:
+    <<: *restart
+    image: pgvector/pgvector:pg16
+    container_name: superwave-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-superwave}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-superwave}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-superwave}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  agent:
+    <<: *restart
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: superwave-agent
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-superwave}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-superwave}
+      LLM_BACKEND: openai_compatible
+      LLM_MODEL: anthropic/claude-sonnet-4-20250514
+      LLM_BASE_URL: https://openrouter.ai/api/v1
+      LLM_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required}
+      AGENT_SOUL_PATH: /app/SOUL.md
+      AGENT_NAME: "Asistente Superwave"
+      TIMEZONE: America/Monterrey
+      GATEWAY_ENABLED: true
+      GATEWAY_HOST: 0.0.0.0
+      GATEWAY_PORT: 3000
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      HTTP_WEBHOOK_SECRET: ${SUPERWAVE_WEBHOOK_SECRET:?SUPERWAVE_WEBHOOK_SECRET is required}
+    volumes:
+      - ./SOUL.md:/app/SOUL.md:ro
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  bridge:
+    <<: *restart
+    build:
+      context: ./manychat-bridge
+      dockerfile: Dockerfile
+    container_name: superwave-bridge
+    depends_on:
+      db:
+        condition: service_healthy
+      agent:
+        condition: service_healthy
+    environment:
+      MANYCHAT_API_KEY: ${MANYCHAT_API_KEY:?MANYCHAT_API_KEY is required}
+      SUPERWAVE_WEBHOOK_URL: http://agent:8080/webhook
+      SUPERWAVE_WEBHOOK_SECRET: ${SUPERWAVE_WEBHOOK_SECRET:?SUPERWAVE_WEBHOOK_SECRET is required}
+      DATABASE_URL: postgres://${POSTGRES_USER:-superwave}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-superwave}
+      BRIDGE_PORT: 4000
+      BRIDGE_SECRET: ${BRIDGE_SECRET:-}
+      ADMIN_SECRET: ${ADMIN_SECRET:?ADMIN_SECRET is required}
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  web:
+    <<: *restart
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: superwave-web
+    depends_on:
+      agent:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3100
+      DASHBOARD_AUTH_SECRET: ${DASHBOARD_AUTH_SECRET:?DASHBOARD_AUTH_SECRET is required}
+      DASHBOARD_ADMIN_EMAIL: ${DASHBOARD_ADMIN_EMAIL:?DASHBOARD_ADMIN_EMAIL is required}
+      DASHBOARD_ADMIN_PASSWORD: ${DASHBOARD_ADMIN_PASSWORD:?DASHBOARD_ADMIN_PASSWORD is required}
+      DASHBOARD_ADMIN_NAME: ${DASHBOARD_ADMIN_NAME:-Admin}
+      SUPERWAVE_CLI_BIN: /usr/local/bin/superwave-agent
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3100/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  db_data:
+    driver: local

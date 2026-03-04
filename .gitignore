@@ -1,0 +1,26 @@
+
+.env
+.env.local
+.env.*
+!.env.example
+
+# Claude Code worktrees
+.claude/worktrees/
+
+# Sidecar tool data
+.sidecar/
+.todos/
+
+target/
+
+# Benchmark results (local runs, not committed)
+bench-results/
+
+# WASM build artifacts (loaded from disk, not bundled)
+*.wasm
+
+
+# ManyChat bridge
+manychat-bridge/node_modules/
+manychat-bridge/test-e2e.js
+manychat-bridge/mock-agent.js
