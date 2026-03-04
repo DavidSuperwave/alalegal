@@ -26,8 +26,8 @@ Fill all `CHANGE_ME_*` values.
 ## 3) Launch containers
 
 ```bash
-docker compose --env-file deploy/clients/alalegal.env up -d --build
-docker compose --env-file deploy/clients/alalegal.env ps
+docker compose -p alalegal --env-file deploy/clients/alalegal.env up -d --build
+docker compose -p alalegal --env-file deploy/clients/alalegal.env ps
 ```
 
 ## 4) Caddy

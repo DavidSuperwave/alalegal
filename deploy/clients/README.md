@@ -18,10 +18,20 @@ cp deploy/clients/alalegal.env.template deploy/clients/<client>.env
 
 Set all required secrets in that file.
 
+For faster replication, use the scaffold script:
+
+```bash
+bash deploy/clients/new-client.sh --client <slug> --domain <slug>.proyectoprisma.com --bridge-port <port> --web-port <port> --gateway-port <port>
+```
+
+See full runbook:
+
+- `deploy/clients/CLIENT_ONBOARDING_PLAYBOOK.md`
+
 ## 2) Launch the client stack
 
 ```bash
-docker compose --env-file deploy/clients/<client>.env up -d --build
+docker compose -p <client> --env-file deploy/clients/<client>.env up -d --build
 ```
 
 With this repository's compose config:
