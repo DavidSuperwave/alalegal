@@ -252,6 +252,10 @@ export function spawnAgentProcess(
 	const requiresShell =
 		process.platform === "win32" && /\.(cmd|bat)$/i.test(cli.command);
 	const cliBase = basename(cli.command).toLowerCase();
+	const isSuperwaveCli =
+		cliBase === "superwave-agent" ||
+		cliBase === "superwave-agent.exe" ||
+		cliBase === "superwave-agent.cmd";
 	const isLegacyScript = cli.argsPrefix.some((arg) =>
 		/[\\/]node_modules[\\/](openclaw|ironclaw)[\\/].+\.mjs$/i.test(arg),
 	);
@@ -263,18 +267,27 @@ export function spawnAgentProcess(
 		cliBase === "ironclaw" ||
 		cliBase === "ironclaw.cmd" ||
 		cliBase === "ironclaw.exe";
+	const args = isSuperwaveCli
+		? [
+				...cli.argsPrefix,
+				"run",
+				"--cli-only",
+				"--no-db",
+				"--no-onboard",
+				"--message",
+				message,
+			]
+		: [
+				...cli.argsPrefix,
+				"agent",
+				"--agent",
+				"main",
+				"--message",
+				message,
+				...(isLegacyOpenclawCli ? ["--json"] : ["--stream-json"]),
+			];
 
-	const args = [
-		...cli.argsPrefix,
-		"agent",
-		"--agent",
-		"main",
-		"--message",
-		message,
-		...(isLegacyOpenclawCli ? ["--json"] : ["--stream-json"]),
-	];
-
-	if (agentSessionId) {
+	if (agentSessionId && !isSuperwaveCli) {
 		if (!isLegacyOpenclawCli) {
 			const sessionKey = `agent:main:web:${agentSessionId}`;
 			args.push("--session-key", sessionKey, "--lane", "web", "--channel", "webchat");
@@ -287,6 +300,14 @@ export function spawnAgentProcess(
 		cwd: root,
 		env: {
 			...process.env,
+			...(isSuperwaveCli
+				? {
+						GATEWAY_ENABLED: "false",
+						HTTP_ENABLED: "false",
+						CLI_ENABLED: "true",
+						ONBOARD_COMPLETED: "true",
+					}
+				: {}),
 			...(profile ? { OPENCLAW_PROFILE: profile } : {}),
 			...(workspace ? { OPENCLAW_WORKSPACE: workspace } : {}),
 		},

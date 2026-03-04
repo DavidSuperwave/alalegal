@@ -112,6 +112,10 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3100
+      LLM_BACKEND: openai_compatible
+      LLM_MODEL: anthropic/claude-sonnet-4
+      LLM_BASE_URL: https://openrouter.ai/api/v1
+      LLM_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required}
       DASHBOARD_AUTH_SECRET: ${DASHBOARD_AUTH_SECRET:?DASHBOARD_AUTH_SECRET is required}
       DASHBOARD_ADMIN_EMAIL: ${DASHBOARD_ADMIN_EMAIL:?DASHBOARD_ADMIN_EMAIL is required}
       DASHBOARD_ADMIN_PASSWORD: ${DASHBOARD_ADMIN_PASSWORD:?DASHBOARD_ADMIN_PASSWORD is required}

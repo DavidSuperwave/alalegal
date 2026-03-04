@@ -921,6 +921,30 @@ function extractLegacyCliText(rawStdout: string): string | null {
 		return `[error] ${errorObj.message.trim()}`;
 	}
 
+	// Superwave native CLI fallback:
+	// In `run --message` mode the CLI emits plain-text output rather than JSON.
+	// Recover a readable assistant reply from raw stdout so web chat still works.
+	const clean = trimmed
+		// eslint-disable-next-line no-control-regex
+		.replace(/\x1B\[[0-9;]*[A-Za-z]/g, "")
+		.replace(/\r/g, "");
+	const preSeparator = clean.split(/[\u2500-]{20,}/, 1)[0] ?? clean;
+	const candidateLines = preSeparator
+		.split("\n")
+		.map((line) => line.trimEnd())
+		.filter((line) => line.trim().length > 0)
+		.filter((line) => {
+			const t = line.trim();
+			if (/^[○●]/.test(t)) {return false;}
+			if (/^\{.*\}$/.test(t)) {return false;}
+			if (/^(info|warn|error)\b/i.test(t)) {return false;}
+			return true;
+		});
+
+	if (candidateLines.length > 0) {
+		return candidateLines.join("\n").trim();
+	}
+
 	return null;
 }
 
