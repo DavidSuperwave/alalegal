@@ -122,7 +122,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - node -e "require('http').get('http://localhost:3100/', r => process.exit(r.statusCode >= 200 && r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))" || exit 1
+        - "node -e \"require('http').get('http://localhost:3100/', r => process.exit(r.statusCode >= 200 && r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))\" || exit 1"
       interval: 30s
       timeout: 10s
       retries: 3
