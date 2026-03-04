@@ -35,7 +35,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: superwave-agent
-    command: ["superwave-agent", "--no-onboard"]
+    command: ["--no-onboard"]
     depends_on:
       db:
         condition: service_healthy
