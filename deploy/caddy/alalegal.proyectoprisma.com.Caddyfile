@@ -1,0 +1,21 @@
+alalegal.proyectoprisma.com {
+  handle /manychat/* {
+    reverse_proxy localhost:4011
+  }
+
+  handle /telegram/* {
+    reverse_proxy localhost:4011
+  }
+
+  handle /admin/* {
+    reverse_proxy localhost:4011
+  }
+
+  handle /health {
+    reverse_proxy localhost:4011
+  }
+
+  handle {
+    reverse_proxy localhost:3111
+  }
+}
