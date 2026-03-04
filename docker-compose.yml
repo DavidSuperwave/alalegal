@@ -122,6 +122,8 @@ services:
       DASHBOARD_ADMIN_PASSWORD: ${DASHBOARD_ADMIN_PASSWORD:?DASHBOARD_ADMIN_PASSWORD is required}
       DASHBOARD_ADMIN_NAME: ${DASHBOARD_ADMIN_NAME:-Admin}
       SUPERWAVE_CLI_BIN: /usr/local/bin/superwave-agent
+      SUPERWAVE_CHAT_WEBHOOK_URL: http://agent:8080/webhook
+      SUPERWAVE_WEBHOOK_SECRET: ${SUPERWAVE_WEBHOOK_SECRET:?SUPERWAVE_WEBHOOK_SECRET is required}
     ports:
       - "3100:3100"
     healthcheck:
