@@ -252,6 +252,10 @@ export function spawnAgentProcess(
 	const requiresShell =
 		process.platform === "win32" && /\.(cmd|bat)$/i.test(cli.command);
 	const cliBase = basename(cli.command).toLowerCase();
+	const isSuperwaveCli =
+		cliBase === "superwave-agent" ||
+		cliBase === "superwave-agent.exe" ||
+		cliBase === "superwave-agent.cmd";
 	const isLegacyScript = cli.argsPrefix.some((arg) =>
 		/[\\/]node_modules[\\/](openclaw|ironclaw)[\\/].+\.mjs$/i.test(arg),
 	);
@@ -263,6 +267,67 @@ export function spawnAgentProcess(
 		cliBase === "ironclaw" ||
 		cliBase === "ironclaw.cmd" ||
 		cliBase === "ironclaw.exe";
+
+	if (isSuperwaveCli) {
+		const webhookUrl =
+			process.env.SUPERWAVE_CHAT_WEBHOOK_URL?.trim() ||
+			"http://agent:8080/webhook";
+		const threadId = agentSessionId
+			? `web:${agentSessionId}`
+			: `web:${Date.now()}`;
+		const webhookProxyScript = `
+const webhookUrl = process.argv[1];
+const message = process.argv[2];
+const threadId = process.argv[3];
+const secret = process.env.SUPERWAVE_WEBHOOK_SECRET || "";
+const controller = new AbortController();
+const timer = setTimeout(() => controller.abort(), 120000);
+(async () => {
+  try {
+    const payload = { content: message, wait_for_response: true, thread_id: threadId };
+    if (secret) { payload.secret = secret; }
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const bodyText = await res.text();
+    let parsed = {};
+    try { parsed = bodyText ? JSON.parse(bodyText) : {}; } catch {}
+    if (!res.ok) {
+      const detail = (parsed && typeof parsed === "object" && (parsed.error ?? parsed.message)) || bodyText;
+      const asText = typeof detail === "string" ? detail : JSON.stringify(detail);
+      throw new Error(\`Webhook request failed (\${res.status}): \${asText}\`);
+    }
+    const reply =
+      (parsed && typeof parsed === "object" && (parsed.response ?? parsed.text ?? parsed.message)) ||
+      (typeof bodyText === "string" ? bodyText : "");
+    const text = typeof reply === "string" ? reply : JSON.stringify(reply);
+    process.stdout.write(JSON.stringify({ payloads: [{ text }] }) + "\\n");
+  } catch (err) {
+    const msg = err && typeof err === "object" && "message" in err
+      ? String(err.message)
+      : String(err);
+    process.stdout.write(JSON.stringify({ error: { message: msg } }) + "\\n");
+    process.exitCode = 1;
+  } finally {
+    clearTimeout(timer);
+  }
+})();
+`;
+		const profile = getEffectiveProfile();
+		const workspace = resolveWorkspaceRoot();
+		return spawn("node", ["-e", webhookProxyScript, webhookUrl, message, threadId], {
+			cwd: root,
+			env: {
+				...process.env,
+				...(profile ? { OPENCLAW_PROFILE: profile } : {}),
+				...(workspace ? { OPENCLAW_WORKSPACE: workspace } : {}),
+			},
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+	}
 
 	const args = [
 		...cli.argsPrefix,

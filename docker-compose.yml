@@ -35,30 +35,40 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: superwave-agent
+    command: ["--no-onboard"]
     depends_on:
       db:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-superwave}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-superwave}
       LLM_BACKEND: openai_compatible
-      LLM_MODEL: anthropic/claude-sonnet-4-20250514
+      LLM_MODEL: anthropic/claude-sonnet-4
       LLM_BASE_URL: https://openrouter.ai/api/v1
       LLM_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required}
       AGENT_SOUL_PATH: /app/SOUL.md
       AGENT_NAME: "Asistente Superwave"
       TIMEZONE: America/Monterrey
+      CLI_ENABLED: "false"
       GATEWAY_ENABLED: true
       GATEWAY_HOST: 0.0.0.0
       GATEWAY_PORT: 3000
       HTTP_HOST: 0.0.0.0
       HTTP_PORT: 8080
       HTTP_WEBHOOK_SECRET: ${SUPERWAVE_WEBHOOK_SECRET:?SUPERWAVE_WEBHOOK_SECRET is required}
+      ONBOARD_COMPLETED: ${ONBOARD_COMPLETED:-true}
+      SECRETS_MASTER_KEY: ${SECRETS_MASTER_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_PATH_TOKEN: ${TELEGRAM_WEBHOOK_PATH_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      TELEGRAM_AGENT_ASSIST_ENABLED: ${TELEGRAM_AGENT_ASSIST_ENABLED:-false}
+      TELEGRAM_AGENT_ASSIST_TIMEOUT_MS: ${TELEGRAM_AGENT_ASSIST_TIMEOUT_MS:-25000}
+      TELEGRAM_REVIEW_CHAT_ID: ${TELEGRAM_REVIEW_CHAT_ID:-}
     volumes:
       - ./SOUL.md:/app/SOUL.md:ro
     ports:
       - "3000:3000"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -102,15 +112,24 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3100
+      DATABASE_URL: postgres://${POSTGRES_USER:-superwave}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-superwave}
+      LLM_BACKEND: openai_compatible
+      LLM_MODEL: anthropic/claude-sonnet-4
+      LLM_BASE_URL: https://openrouter.ai/api/v1
+      LLM_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required}
       DASHBOARD_AUTH_SECRET: ${DASHBOARD_AUTH_SECRET:?DASHBOARD_AUTH_SECRET is required}
       DASHBOARD_ADMIN_EMAIL: ${DASHBOARD_ADMIN_EMAIL:?DASHBOARD_ADMIN_EMAIL is required}
       DASHBOARD_ADMIN_PASSWORD: ${DASHBOARD_ADMIN_PASSWORD:?DASHBOARD_ADMIN_PASSWORD is required}
       DASHBOARD_ADMIN_NAME: ${DASHBOARD_ADMIN_NAME:-Admin}
       SUPERWAVE_CLI_BIN: /usr/local/bin/superwave-agent
+      SUPERWAVE_CHAT_WEBHOOK_URL: http://agent:8080/webhook
+      SUPERWAVE_WEBHOOK_SECRET: ${SUPERWAVE_WEBHOOK_SECRET:?SUPERWAVE_WEBHOOK_SECRET is required}
     ports:
       - "3100:3100"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3100/ || exit 1"]
+      test:
+        - CMD-SHELL
+        - 'node -e "const h=require(\"os\").hostname();fetch(\"http://\"+h+\":3100/\").then(r=>process.exit(r.status>=200&&r.status<500?0:1)).catch(()=>process.exit(1))" || exit 1'
       interval: 30s
       timeout: 10s
       retries: 3

@@ -191,6 +191,57 @@ describe("active-runs", () => {
 			).toBe(true);
 		});
 
+		it("extracts text from legacy pretty JSON with top-level payloads", async () => {
+			const { child, startRun, subscribeToRun } = await setup();
+
+			const events: SseEvent[] = [];
+
+			startRun({
+				sessionId: "s-legacy-payloads",
+				message: "hello",
+				agentSessionId: "s-legacy-payloads",
+			});
+
+			subscribeToRun(
+				"s-legacy-payloads",
+				(event) => {
+					if (event) {events.push(event);}
+				},
+				{ replay: false },
+			);
+
+			// Simulate legacy CLI pretty JSON output (not NDJSON lines).
+			child.stdout.write(
+				`{
+  "payloads": [
+    { "text": "WEB_SMOKE_OK", "mediaUrl": null }
+  ],
+  "meta": {}
+}
+`,
+			);
+			child.stdout.end();
+			await new Promise((r) => setTimeout(r, 50));
+			child._emit("close", 0);
+
+			expect(
+				events.some(
+					(e) =>
+						e.type === "text-delta" &&
+						typeof e.delta === "string" &&
+						(e.delta).includes("WEB_SMOKE_OK"),
+				),
+			).toBe(true);
+			expect(
+				events.some(
+					(e) =>
+						e.type === "text-delta" &&
+						typeof e.delta === "string" &&
+						(e.delta).includes("No response"),
+				),
+			).toBe(false);
+		});
+
 		it("streams assistant text events for agent assistant output", async () => {
 			const { child, startRun, subscribeToRun } = await setup();
 
