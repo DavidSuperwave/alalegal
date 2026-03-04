@@ -173,6 +173,9 @@ Comandos de revisión:
 - Aprobar sugerencia del agente: `/approve <review_id>`
 - Enviar respuesta custom: `/reply <review_id> <texto>`
 - Ver pendientes: `/pending`
+- Ayuda rápida: `/help`
+
+También puedes escribir mensajes normales (sin `/`) y el agente responderá en ese chat para asistir a tu equipo con contexto de leads pendientes.
 
 ---
 

@@ -169,6 +169,11 @@ Comandos disponibles en Telegram:
 - `/pending`
 - `/approve <review_id>`
 - `/reply <review_id> <texto>`
+- `/help`
+
+Modo asistente:
+
+- Mensajes sin `/` se envían al agente para soporte operativo del equipo en ese mismo chat.
 
 ---
 

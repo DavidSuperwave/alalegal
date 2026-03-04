@@ -44,6 +44,8 @@ const {
   TELEGRAM_WEBHOOK_PATH_TOKEN = '',
   TELEGRAM_WEBHOOK_SECRET  = '',
   TELEGRAM_API_BASE_URL    = 'https://api.telegram.org',
+  TELEGRAM_AGENT_ASSIST_ENABLED = 'true',
+  TELEGRAM_AGENT_ASSIST_TIMEOUT_MS = '25000',
   // Kanban board integration (OpenClaw workspace object API by default)
   KANBAN_API_BASE_URL      = 'http://web:3100',
   KANBAN_OBJECT_NAME       = 'task',
@@ -53,6 +55,10 @@ const {
 const PORT = parseInt(BRIDGE_PORT, 10);
 const ANALYSIS_TIMEOUT_MS = Math.max(1000, parseInt(AGENT_ANALYSIS_TIMEOUT_MS, 10) || 18000);
 const DRY_RUN = ['1', 'true', 'yes', 'on'].includes(String(BRIDGE_DRY_RUN).toLowerCase());
+const TELEGRAM_ASSIST_ENABLED = ['1', 'true', 'yes', 'on'].includes(
+  String(TELEGRAM_AGENT_ASSIST_ENABLED).toLowerCase()
+);
+const TELEGRAM_ASSIST_TIMEOUT_MS = Math.max(1000, parseInt(TELEGRAM_AGENT_ASSIST_TIMEOUT_MS, 10) || 25000);
 
 // ─── PostgreSQL pool ─────────────────────────────────────────
 const pool = new Pool({
@@ -1099,6 +1105,93 @@ async function loadPendingReview(reviewId) {
 }
 
 /**
+ * Return pending reviews from DB when possible, otherwise in-memory.
+ * @param {number} limit
+ * @returns {Promise<Array<object>>}
+ */
+async function listPendingReviews(limit = 10) {
+  const capped = Math.max(1, Math.min(limit, 100));
+  try {
+    const { rows } = await pool.query(
+      `SELECT review_id, subscriber_id, channel, first_name, last_name,
+              source_message, classification, confidence, suggested_reply,
+              status, created_at
+       FROM mc_pending_reviews
+       WHERE status = 'pending'
+       ORDER BY created_at DESC
+       LIMIT $1`,
+      [capped]
+    );
+    if (rows.length) return rows;
+  } catch (_err) {
+    // Fall through to in-memory cache
+  }
+
+  return Array.from(pendingReviews.values())
+    .filter((item) => item.status === 'pending')
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+    .slice(0, capped);
+}
+
+/**
+ * Help text for Telegram review + assist mode.
+ * @returns {string}
+ */
+function telegramHelpText() {
+  return [
+    'Comandos de revisión:',
+    '/pending',
+    '/approve <review_id>',
+    '/reply <review_id> <texto>',
+    '',
+    'Modo asistente:',
+    '- Escribe cualquier mensaje sin comando y el agente te responderá aquí.',
+  ].join('\n');
+}
+
+/**
+ * Ask the agent to assist operators in Telegram review chat.
+ * @param {object} params
+ * @returns {Promise<string>}
+ */
+async function assistFromTelegram(params) {
+  const pending = await listPendingReviews(5);
+  const pendingSummary = pending.length
+    ? pending
+        .map((item) => {
+          const name = `${item.first_name || ''} ${item.last_name || ''}`.trim() || item.subscriber_id;
+          return `- ${item.review_id} | ${item.classification} (${item.confidence}) | ${item.channel} | ${name}`;
+        })
+        .join('\n')
+    : '(sin pendientes)';
+
+  const prompt = [
+    'Eres el asistente operativo del equipo que revisa leads de ManyChat.',
+    'Responde de forma breve, accionable y en español mexicano.',
+    'Si el usuario pide ayuda operativa, sugiere comandos /pending /approve /reply cuando aplique.',
+    'No inventes IDs: usa solo los que aparecen en contexto.',
+    '',
+    `Chat de revisión: ${params.chatId}`,
+    'Leads pendientes recientes:',
+    pendingSummary,
+    '',
+    `Mensaje del operador: """${params.userText}"""`,
+  ].join('\n');
+
+  const raw = await forwardToAgent(
+    {
+      content: prompt,
+      thread_id: `telegram:review:${params.chatId}`,
+    },
+    {
+      timeoutMs: TELEGRAM_ASSIST_TIMEOUT_MS,
+    }
+  );
+
+  return String(raw || '').trim();
+}
+
+/**
  * Create lead on workspace kanban object API.
  * @param {object} lead
  * @returns {Promise<{ok:boolean, entryId:string|null, error?:string}>}
@@ -1509,11 +1602,10 @@ app.post('/telegram/webhook/:pathToken', async (req, res) => {
   const approveMatch = text.match(/^\/approve\s+([A-Za-z0-9_-]+)\s*$/i);
   const replyMatch = text.match(/^\/reply\s+([A-Za-z0-9_-]+)\s+([\s\S]+)$/i);
   const pendingCmd = /^\/pending\b/i.test(text);
+  const helpCmd = /^\/help\b/i.test(text);
 
   if (pendingCmd) {
-    const pending = Array.from(pendingReviews.values())
-      .filter((item) => item.status === 'pending')
-      .slice(0, 10);
+    const pending = await listPendingReviews(10);
     if (!pending.length) {
       await sendTelegramMessage(chatId, 'No hay leads pendientes por aprobar.');
       return res.json({ ok: true, command: 'pending', count: 0 });
@@ -1526,12 +1618,42 @@ app.post('/telegram/webhook/:pathToken', async (req, res) => {
     return res.json({ ok: true, command: 'pending', count: pending.length });
   }
 
+  if (helpCmd) {
+    await sendTelegramMessage(chatId, telegramHelpText());
+    return res.json({ ok: true, command: 'help' });
+  }
+
   if (!approveMatch && !replyMatch) {
+    if (text.startsWith('/')) {
+      await sendTelegramMessage(chatId, telegramHelpText());
+      return res.json({ ok: true, ignored: 'unknown-command' });
+    }
+
+    if (!TELEGRAM_ASSIST_ENABLED) {
+      await sendTelegramMessage(chatId, telegramHelpText());
+      return res.json({ ok: true, mode: 'assist-disabled' });
+    }
+
+    let reply = '';
+    try {
+      reply = await assistFromTelegram({
+        chatId,
+        userText: text,
+      });
+    } catch (err) {
+      console.error('[telegram] assist mode failed:', err.message);
+      reply = 'No pude consultar al agente en este momento. Intenta de nuevo en unos segundos.';
+    }
+
+    if (!reply) {
+      reply = 'No encontré una respuesta útil. Usa /pending para revisar leads activos.';
+    }
+
     await sendTelegramMessage(
       chatId,
-      'Comando no reconocido.\nUsa:\n/approve <review_id>\n/reply <review_id> <texto>\n/pending'
+      reply
     );
-    return res.json({ ok: true, ignored: 'unknown-command' });
+    return res.json({ ok: true, mode: 'chat' });
   }
 
   const reviewId = approveMatch ? approveMatch[1] : replyMatch[1];
@@ -1624,6 +1746,7 @@ app.get('/health', async (_req, res) => {
     dryRun: DRY_RUN,
     integrations: {
       telegram_review: Boolean(TELEGRAM_BOT_TOKEN && TELEGRAM_REVIEW_CHAT_ID && TELEGRAM_WEBHOOK_PATH_TOKEN),
+      telegram_assist: TELEGRAM_ASSIST_ENABLED,
       kanban: Boolean(KANBAN_API_BASE_URL && KANBAN_OBJECT_NAME),
       agent_analysis: Boolean(SUPERWAVE_WEBHOOK_URL),
     },
@@ -1765,6 +1888,7 @@ async function main() {
         ? 'configured'
         : 'not configured'
     }`);
+    console.log(`[bridge] Telegram assist mode: ${TELEGRAM_ASSIST_ENABLED ? 'enabled' : 'disabled'}`);
   });
 }
 
