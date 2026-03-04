@@ -86,6 +86,12 @@ Llena los siguientes valores:
 | `MANYCHAT_API_KEY` | Token de ManyChat | ManyChat → Settings → API → Access Token |
 | `ADMIN_SECRET` | Protege `/admin/stats` | `openssl rand -hex 24` |
 | `SUPERWAVE_WEBHOOK_SECRET` | Autenticación bridge→agente (requerida) | `openssl rand -hex 32` |
+| `TELEGRAM_BOT_TOKEN` | Bot para revisión humana | @BotFather |
+| `TELEGRAM_REVIEW_CHAT_ID` | Chat/grupo de revisión | ID numérico del chat |
+| `TELEGRAM_WEBHOOK_PATH_TOKEN` | Token de ruta webhook Telegram | `openssl rand -hex 16` |
+| `TELEGRAM_WEBHOOK_SECRET` | Secret header de Telegram webhook | `openssl rand -hex 24` |
+| `KANBAN_API_BASE_URL` | URL base del dashboard workspace API | Normalmente `http://web:3100` |
+| `KANBAN_OBJECT_NAME` | Objeto kanban destino | `task` (default) o tu objeto (ej. `leads`) |
 
 Guarda el archivo (`Ctrl+O`, `Enter`, `Ctrl+X` en nano).
 
@@ -147,7 +153,26 @@ https://bot.superwave.ai/manychat/webhook
 
 ---
 
-## Paso 8 — Dominio + SSL con Caddy
+## Paso 8 — Configurar webhook de Telegram (revisión humana)
+
+```bash
+source .env
+
+curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+  -d "url=https://bot.superwave.ai/telegram/webhook/${TELEGRAM_WEBHOOK_PATH_TOKEN}" \
+  -d "secret_token=${TELEGRAM_WEBHOOK_SECRET}" \
+  -d 'allowed_updates=["message","edited_message"]'
+```
+
+Comandos disponibles en Telegram:
+
+- `/pending`
+- `/approve <review_id>`
+- `/reply <review_id> <texto>`
+
+---
+
+## Paso 9 — Dominio + SSL con Caddy
 
 Caddy gestiona SSL automático vía Let's Encrypt.
 
@@ -164,6 +189,9 @@ apt update && apt install caddy
 cat > /etc/caddy/Caddyfile << 'EOF'
 bot.superwave.ai {
   handle /manychat/* {
+    reverse_proxy localhost:4000
+  }
+  handle /telegram/* {
     reverse_proxy localhost:4000
   }
   handle /admin/* {
@@ -186,7 +214,7 @@ systemctl status caddy
 
 ---
 
-## Paso 9 — Prueba funcional
+## Paso 10 — Prueba funcional
 
 Envía un mensaje de WhatsApp o Messenger a tu página conectada en ManyChat:
 
@@ -194,12 +222,18 @@ Envía un mensaje de WhatsApp o Messenger a tu página conectada en ManyChat:
 Hola, tuve un accidente y la aseguradora no me quiere pagar
 ```
 
-Deberías recibir una respuesta en español del asistente virtual.
+Flujo esperado:
+
+1. El cliente recibe ACK inmediato.
+2. En Telegram llega lead con `review_id`.
+3. Apruebas con `/approve <review_id>` o editas con `/reply <review_id> <texto>`.
+4. El cliente recibe el mensaje final enviado por ManyChat API.
 
 Verifica los registros en la BD local:
 
 ```bash
 docker compose exec db psql -U superwave -d superwave -c "SELECT * FROM mc_messages LIMIT 5;"
+docker compose exec db psql -U superwave -d superwave -c "SELECT review_id,status FROM mc_pending_reviews ORDER BY created_at DESC LIMIT 5;"
 ```
 
 ---
@@ -259,3 +293,6 @@ Los puertos 4000, 3000, 8080, 3100 **no** deben ser accesibles públicamente —
 | El bridge responde `Cannot connect to agent` | Espera 30 s a que el agente inicialice: `docker compose logs agent` |
 | Caddy no obtiene certificado SSL | Verifica que el DNS ya apunte a tu IP: `dig bot.superwave.ai` |
 | ManyChat no llega al webhook | Verifica que el External Request apunte a `https://bot.superwave.ai/manychat/webhook` con método POST |
+| No llega revisión a Telegram | Revisa `TELEGRAM_BOT_TOKEN`, `TELEGRAM_REVIEW_CHAT_ID` y ejecuta `setWebhook` del Paso 8 |
+| Aprobas en Telegram pero no sale mensaje al cliente | Verifica `MANYCHAT_API_KEY` y logs de bridge para errores de `/fb|wa/subscriber/sendContent` |
+| No se crean leads en kanban | Valida que `web` esté arriba y que `KANBAN_OBJECT_NAME` exista (`task` recomendado al inicio) |

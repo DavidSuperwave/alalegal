@@ -73,6 +73,7 @@ declare -A FIELDS=(
   ["telefono"]="text"
   ["estado"]="text"
   ["ultima_clasificacion"]="text"
+  ["review_id"]="text"
   ["ultimo_contacto"]="text"
   ["canal"]="text"
   ["monto_preaprobado"]="text"
