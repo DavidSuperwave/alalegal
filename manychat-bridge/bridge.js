@@ -2289,15 +2289,17 @@ app.get('/admin/pending', async (req, res) => {
   }
 
   const inMemory = Array.from(pendingReviews.values())
+    .filter((item) => item.status === 'pending')
     .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
 
   // If DB is available, return authoritative list from DB.
   try {
     const { rows } = await pool.query(
       `SELECT review_id, subscriber_id, channel, first_name, last_name, source_message,
-              classification, confidence, suggested_reply, status, final_reply,
-              approved_by_chat, created_at, reviewed_at
+              classification, pillar, specialist_role, fit_score, fit_label, lead_stage,
+              confidence, suggested_reply, status, final_reply, approved_by_chat, created_at, reviewed_at
        FROM mc_pending_reviews
+       WHERE status = 'pending'
        ORDER BY created_at DESC
        LIMIT 100`
     );
