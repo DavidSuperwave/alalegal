@@ -2028,6 +2028,7 @@ app.post('/telegram/webhook/:pathToken', async (req, res) => {
   const replyMatch = text.match(/^\/reply\s+([A-Za-z0-9_-]+)\s+([\s\S]+)$/i);
   const pendingCmd = /^\/pending\b/i.test(text);
   const helpCmd = /^\/help\b/i.test(text);
+  const startCmd = /^\/start\b/i.test(text);
 
   if (pendingCmd) {
     const pending = await listPendingReviews(10);
@@ -2044,9 +2045,9 @@ app.post('/telegram/webhook/:pathToken', async (req, res) => {
     return res.json({ ok: true, command: 'pending', count: pending.length });
   }
 
-  if (helpCmd) {
+  if (helpCmd || startCmd) {
     await sendTelegramMessage(chatId, telegramHelpText());
-    return res.json({ ok: true, command: 'help' });
+    return res.json({ ok: true, command: startCmd ? 'start' : 'help' });
   }
 
   if (!approveMatch && !replyMatch) {
