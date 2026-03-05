@@ -14,13 +14,20 @@ ManyChat recibe el mensaje
 Flow: Superwave — Lead Intake
     ↓  acción: External Request (HTTP POST)
 Bridge en bot.superwave.ai:4000
-    ↓  agente clasifica + sugiere respuesta
+    ↓  agente clasifica por pilar + sugiere respuesta
     ↓  bridge crea lead en tablero kanban
     ↓  bridge envía revisión al equipo por Telegram
 Bridge devuelve ACK inmediato a ManyChat (opcional)
     ↓  humano aprueba/edita en Telegram
     ↓  bridge envía respuesta final por ManyChat API
 ```
+
+Pilares operativos ALA Legal:
+
+1. **Fallecimientos ⚰️** → *Agente Empatía*  
+2. **Lesiones 🦽** → *Agente Evaluación*  
+3. **Aseguradoras 🛡** → *Agente Negociador*  
+4. **Litigios ⚖️** → *Agente Legal*
 
 ---
 
@@ -118,7 +125,11 @@ Respuesta típica:
     ]
   },
   "review_id": "rvw_ab12cd34ef56",
-  "classification": "consulta_legal"
+  "classification": "consulta_legal",
+  "pillar": "aseguradoras",
+  "specialist_role": "Agente Negociador",
+  "fit_score": 0.82,
+  "fit_label": "alto"
 }
 ```
 
@@ -127,7 +138,10 @@ Configuración recomendada:
 1. En la acción External Request, deja la respuesta dinámica activada solo para mostrar el ACK.
 2. (Opcional) Guarda `$.review_id` en un custom field `review_id`.
 3. (Opcional) Guarda `$.classification` en `ultima_clasificacion`.
-4. **No dependas de `$.content.messages[0].text` como respuesta final**; la respuesta final se enviará después desde el bridge vía ManyChat API cuando apruebes en Telegram.
+4. (Opcional) Guarda `$.pillar` en `pilar_servicio`.
+5. (Opcional) Guarda `$.fit_score` en `fit_caso`.
+6. (Opcional) Guarda `$.review_id` en `review_id`.
+7. **No dependas de `$.content.messages[0].text` como respuesta final**; la respuesta final se enviará después desde el bridge vía ManyChat API cuando apruebes en Telegram.
 
 ---
 
@@ -176,6 +190,16 @@ Comandos de revisión:
 - Ayuda rápida: `/help`
 
 También puedes escribir mensajes normales (sin `/`) y el agente responderá en ese chat para asistir a tu equipo con contexto de leads pendientes.
+
+### Entrenamiento continuo del tono (learning loop)
+
+- Cada vez que apruebas con `/approve`, se guarda la respuesta sugerida como ejemplo válido.
+- Cada vez que respondes con `/reply ...`, se guarda tu versión humana como ejemplo prioritario.
+- El bridge reinyecta ejemplos recientes aprobados en el prompt del agente para que adopte tono y cadencia del despacho.
+- También actualiza el **stage de kanban** automáticamente:
+  - `fit_score >= 0.75` → `In Progress` (calificado)
+  - `fit_score <= 0.35` → `Done` (bajo fit)
+  - rango medio → `In Queue` hasta la primera respuesta, luego `In Progress`
 
 ---
 

@@ -92,6 +92,11 @@ Llena los siguientes valores:
 | `TELEGRAM_WEBHOOK_SECRET` | Secret header de Telegram webhook | `openssl rand -hex 24` |
 | `KANBAN_API_BASE_URL` | URL base del dashboard workspace API | Normalmente `http://web:3100` |
 | `KANBAN_OBJECT_NAME` | Objeto kanban destino | `task` (default) o tu objeto (ej. `leads`) |
+| `KANBAN_STAGE_NEW` | Estado inicial del lead | Default `In Queue` |
+| `KANBAN_STAGE_QUALIFIED` | Estado para lead calificado | Default `In Progress` |
+| `KANBAN_STAGE_ARCHIVE` | Estado para lead de bajo fit | Default `Done` |
+| `FIT_SCORE_HIGH` | Umbral alto de fit | Default `0.75` |
+| `FIT_SCORE_LOW` | Umbral bajo de fit | Default `0.35` |
 
 Guarda el archivo (`Ctrl+O`, `Enter`, `Ctrl+X` en nano).
 

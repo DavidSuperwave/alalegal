@@ -203,8 +203,19 @@ Keep core integration identical; customize only these:
 ### Pipeline behavior
 - `KANBAN_OBJECT_NAME`
 - `KANBAN_DEFAULT_STATUS`
+- `KANBAN_STAGE_NEW`
+- `KANBAN_STAGE_QUALIFIED`
+- `KANBAN_STAGE_ARCHIVE`
+- `FIT_SCORE_HIGH`
+- `FIT_SCORE_LOW`
 - `AGENT_ANALYSIS_TIMEOUT_MS`
 - `TELEGRAM_AGENT_ASSIST_ENABLED`
+
+### ALA Legal taxonomy (default in bridge v3)
+- `fallecimientos` → `Agente Empatía`
+- `lesiones` → `Agente Evaluación`
+- `aseguradoras` → `Agente Negociador`
+- `litigios` → `Agente Legal`
 
 ### Security
 - rotate all secrets per client:
