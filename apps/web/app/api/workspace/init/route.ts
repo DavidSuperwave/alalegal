@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { resolveOpenClawStateDir, setUIActiveProfile, getEffectiveProfile, resolveWorkspaceRoot, registerWorkspacePath } from "@/lib/workspace";
+import { duckdbExecOnFile, resolveDuckdbBin } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -194,18 +195,75 @@ function writeIfMissing(filePath: string, content: string): boolean {
   }
 }
 
+function sqlEscape(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+function seedFieldId(objectName: string, fieldName: string): string {
+  const compact = `${objectName}_${fieldName}`.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 26);
+  return `seed_fld_${compact}`;
+}
+
+function buildSeedSchemaSql(): string {
+  const statements: string[] = [
+    "CREATE TABLE IF NOT EXISTS objects (id VARCHAR PRIMARY KEY, name VARCHAR NOT NULL UNIQUE, description VARCHAR, icon VARCHAR, default_view VARCHAR DEFAULT 'table', display_field VARCHAR, immutable BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT now(), updated_at TIMESTAMP DEFAULT now())",
+    "CREATE TABLE IF NOT EXISTS fields (id VARCHAR PRIMARY KEY, object_id VARCHAR NOT NULL, name VARCHAR NOT NULL, description VARCHAR, type VARCHAR NOT NULL, required BOOLEAN DEFAULT false, default_value VARCHAR, related_object_id VARCHAR, relationship_type VARCHAR, enum_values JSON, enum_colors JSON, enum_multiple BOOLEAN DEFAULT false, sort_order INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT now(), updated_at TIMESTAMP DEFAULT now(), UNIQUE(object_id, name))",
+    "CREATE TABLE IF NOT EXISTS entries (id VARCHAR PRIMARY KEY, object_id VARCHAR NOT NULL, sort_order INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT now(), updated_at TIMESTAMP DEFAULT now())",
+    "CREATE TABLE IF NOT EXISTS entry_fields (id VARCHAR PRIMARY KEY, entry_id VARCHAR NOT NULL, field_id VARCHAR NOT NULL, value VARCHAR, created_at TIMESTAMP DEFAULT now(), updated_at TIMESTAMP DEFAULT now(), UNIQUE(entry_id, field_id))",
+    "CREATE TABLE IF NOT EXISTS statuses (id VARCHAR PRIMARY KEY, object_id VARCHAR NOT NULL, name VARCHAR NOT NULL, color VARCHAR DEFAULT '#94a3b8', sort_order INTEGER DEFAULT 0, is_default BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT now(), updated_at TIMESTAMP DEFAULT now(), UNIQUE(object_id, name))",
+  ];
+
+  for (const obj of SEED_OBJECTS) {
+    const displayField = obj.fields.find((f) => /\bname\b/i.test(f.name) || /\btitle\b/i.test(f.name))?.name || obj.fields[0]?.name || "id";
+    statements.push(
+      `INSERT INTO objects (id, name, description, icon, default_view, display_field, immutable) VALUES ('${sqlEscape(obj.id)}', '${sqlEscape(obj.name)}', '${sqlEscape(obj.description)}', '${sqlEscape(obj.icon)}', '${sqlEscape(obj.defaultView)}', '${sqlEscape(displayField)}', false) ON CONFLICT(name) DO NOTHING`
+    );
+
+    obj.fields.forEach((field, index) => {
+      const fieldId = seedFieldId(obj.name, field.name);
+      const enumValues = field.enumValues ? `'${sqlEscape(JSON.stringify(field.enumValues))}'::JSON` : "NULL";
+      statements.push(
+        `INSERT INTO fields (id, object_id, name, type, required, enum_values, sort_order) VALUES ('${sqlEscape(fieldId)}', '${sqlEscape(obj.id)}', '${sqlEscape(field.name)}', '${sqlEscape(field.type)}', ${field.required ? "true" : "false"}, ${enumValues}, ${index}) ON CONFLICT(object_id, name) DO NOTHING`
+      );
+    });
+
+    const statusField = obj.fields.find((f) => f.name === "Status" && Array.isArray(f.enumValues));
+    if (statusField?.enumValues) {
+      statusField.enumValues.forEach((status, index) => {
+        statements.push(
+          `INSERT INTO statuses (id, object_id, name, sort_order, is_default) VALUES ('${sqlEscape(`seed_status_${obj.name}_${index}`)}', '${sqlEscape(obj.id)}', '${sqlEscape(status)}', ${index}, ${index === 0 ? "true" : "false"}) ON CONFLICT(object_id, name) DO NOTHING`
+        );
+      });
+    }
+  }
+
+  return statements.join(";\n") + ";\n";
+}
+
 function seedDuckDB(workspaceDir: string, projectRoot: string | null): boolean {
   const destPath = join(workspaceDir, "workspace.duckdb");
   if (existsSync(destPath)) {return false;}
 
-  if (!projectRoot) {return false;}
+  let seeded = false;
+  if (projectRoot) {
+    const seedDb = join(projectRoot, "assets", "seed", "workspace.duckdb");
+    if (existsSync(seedDb)) {
+      try {
+        copyFileSync(seedDb, destPath);
+        seeded = true;
+      } catch {
+        seeded = false;
+      }
+    }
+  }
 
-  const seedDb = join(projectRoot, "assets", "seed", "workspace.duckdb");
-  if (!existsSync(seedDb)) {return false;}
+  if (!seeded) {
+    // Fallback for production images where the prebuilt seed DB is unavailable.
+    if (!resolveDuckdbBin()) {return false;}
+    seeded = duckdbExecOnFile(destPath, buildSeedSchemaSql());
+  }
 
-  try {
-    copyFileSync(seedDb, destPath);
-  } catch {
+  if (!seeded) {
     return false;
   }
 

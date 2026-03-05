@@ -30,7 +30,19 @@ FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates libssl3 \
+    ca-certificates libssl3 curl unzip \
+    && rm -rf /var/lib/apt/lists/* \
+    && arch="$(dpkg --print-architecture)" \
+    && case "$arch" in \
+      amd64) duck_arch="linux-amd64" ;; \
+      arm64) duck_arch="linux-aarch64" ;; \
+      *) echo "Unsupported architecture for DuckDB CLI: $arch" && exit 1 ;; \
+    esac \
+    && curl -fsSL "https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-${duck_arch}.zip" -o /tmp/duckdb.zip \
+    && unzip -q /tmp/duckdb.zip -d /tmp \
+    && mv /tmp/duckdb /usr/local/bin/duckdb \
+    && chmod +x /usr/local/bin/duckdb \
+    && rm -f /tmp/duckdb.zip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=rust-builder /repo/target/release/superwave-agent /usr/local/bin/superwave-agent
@@ -38,6 +50,8 @@ COPY --from=rust-builder /repo/migrations /app/migrations
 COPY --from=web-builder /repo/apps/web/.next/standalone ./
 COPY --from=web-builder /repo/apps/web/.next/static /app/apps/web/.next/static
 COPY --from=web-builder /repo/apps/web/public /app/apps/web/public
+# Workspace bootstrap assets required by /api/workspace/init
+COPY docs/reference/templates /app/docs/reference/templates
 
 ENV NODE_ENV=production
 ENV PORT=3100
