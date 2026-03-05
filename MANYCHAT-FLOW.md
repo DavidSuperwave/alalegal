@@ -4,22 +4,30 @@
 
 ---
 
-## Arquitectura del flujo
+## Arquitectura del flujo (v3 — aprobación en Telegram)
 
 ```
 Usuario (WhatsApp / Messenger / Instagram / TikTok)
     ↓  escribe un mensaje
 ManyChat recibe el mensaje
     ↓  activa el "Default Reply"
-Flow: Superwave — Respuesta Automática
+Flow: Superwave — Lead Intake
     ↓  acción: External Request (HTTP POST)
 Bridge en bot.superwave.ai:4000
-    ↓  clasifica + enriquece + forward
-Superwave Agent (Claude vía OpenRouter)
-    ↓  genera respuesta en español
-Bridge devuelve la respuesta
-    ↓  ManyChat la envía al usuario
+    ↓  agente clasifica por pilar + sugiere respuesta
+    ↓  bridge crea lead en tablero kanban
+    ↓  bridge envía revisión al equipo por Telegram
+Bridge devuelve ACK inmediato a ManyChat (opcional)
+    ↓  humano aprueba/edita en Telegram
+    ↓  bridge envía respuesta final por ManyChat API
 ```
+
+Pilares operativos ALA Legal:
+
+1. **Fallecimientos ⚰️** → *Agente Empatía*  
+2. **Lesiones 🦽** → *Agente Evaluación*  
+3. **Aseguradoras 🛡** → *Agente Negociador*  
+4. **Litigios ⚖️** → *Agente Legal*
 
 ---
 
@@ -30,7 +38,7 @@ Bridge devuelve la respuesta
 1. Entra a [manychat.com](https://manychat.com) y selecciona tu página.
 2. En el menú lateral izquierdo, haz clic en **Flows**.
 3. Haz clic en el botón azul **+ New Flow** (esquina superior derecha).
-4. Nombra el flujo: `Superwave — Respuesta Automática`.
+4. Nombra el flujo: `Superwave — Lead Intake`.
 5. Haz clic en **Create**.
 
 ---
@@ -103,40 +111,37 @@ https://bot.superwave.ai/manychat/webhook
 
 ### 1.4 Mapear la respuesta
 
-Después de la acción External Request, debes mostrar la respuesta al usuario.
+En v3 el bridge **ya no devuelve la respuesta final del agente** en ese momento.  
+Ahora devuelve un **ACK rápido** mientras el equipo revisa por Telegram.
 
-#### Opción A — Dynamic Response (recomendada)
-
-ManyChat soporta respuestas dinámicas directamente del External Request si el body de respuesta sigue el formato ManyChat v2:
+Respuesta típica:
 
 ```json
 {
   "version": "v2",
   "content": {
     "messages": [
-      { "type": "text", "text": "Hola, te puedo ayudar..." }
+      { "type": "text", "text": "Gracias por tu mensaje..." }
     ]
-  }
+  },
+  "review_id": "rvw_ab12cd34ef56",
+  "classification": "consulta_legal",
+  "pillar": "aseguradoras",
+  "specialist_role": "Agente Negociador",
+  "fit_score": 0.82,
+  "fit_label": "alto"
 }
 ```
 
-El bridge ya devuelve este formato. Para activarlo:
+Configuración recomendada:
 
-1. En la acción External Request, ve a la sección **Response**.
-2. Haz clic en **+ Add Response Mapping**.
-3. En **Field to save**, selecciona o crea el Custom Field `ultima_clasificacion`.
-4. En **JSONPath**, ingresa: `$.response` (o `$.content.messages[0].text`).
-5. Activa la opción **"Use response as message"** si está disponible en tu versión de ManyChat.
-
-#### Opción B — Guardar y enviar (más compatible)
-
-1. En la acción External Request → Response, agrega un mapping:
-   - **JSONPath:** `$.content.messages[0].text`
-   - **Save to Custom Field:** crea o selecciona `respuesta_bot` (tipo Text)
-
-2. Después del bloque External Request, agrega un paso **Message**.
-
-3. En el mensaje, escribe `{{custom:respuesta_bot}}` — esto mostrará la respuesta del bot.
+1. En la acción External Request, deja la respuesta dinámica activada solo para mostrar el ACK.
+2. (Opcional) Guarda `$.review_id` en un custom field `review_id`.
+3. (Opcional) Guarda `$.classification` en `ultima_clasificacion`.
+4. (Opcional) Guarda `$.pillar` en `pilar_servicio`.
+5. (Opcional) Guarda `$.fit_score` en `fit_caso`.
+6. (Opcional) Guarda `$.review_id` en `review_id`.
+7. **No dependas de `$.content.messages[0].text` como respuesta final**; la respuesta final se enviará después desde el bridge vía ManyChat API cuando apruebes en Telegram.
 
 ---
 
@@ -153,6 +158,51 @@ Agrega un paso de mensaje **después** del External Request para el caso de erro
 
 ---
 
+### 1.6 Configurar revisión por Telegram (obligatorio en v3)
+
+El bridge requiere un canal de revisión para aprobar o editar respuestas:
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_REVIEW_CHAT_ID`
+- `TELEGRAM_WEBHOOK_PATH_TOKEN` (token aleatorio para la ruta)
+- `TELEGRAM_WEBHOOK_SECRET` (token secreto para header de Telegram)
+
+Webhook que debe recibir Telegram:
+
+```
+https://bot.superwave.ai/telegram/webhook/<TELEGRAM_WEBHOOK_PATH_TOKEN>
+```
+
+Registrar webhook (ejemplo):
+
+```bash
+curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+  -d "url=https://bot.superwave.ai/telegram/webhook/${TELEGRAM_WEBHOOK_PATH_TOKEN}" \
+  -d "secret_token=${TELEGRAM_WEBHOOK_SECRET}" \
+  -d "allowed_updates=[\"message\",\"edited_message\"]"
+```
+
+Comandos de revisión:
+
+- Aprobar sugerencia del agente: `/approve <review_id>`
+- Enviar respuesta custom: `/reply <review_id> <texto>`
+- Ver pendientes: `/pending`
+- Ayuda rápida: `/help`
+
+También puedes escribir mensajes normales (sin `/`) y el agente responderá en ese chat para asistir a tu equipo con contexto de leads pendientes.
+
+### Entrenamiento continuo del tono (learning loop)
+
+- Cada vez que apruebas con `/approve`, se guarda la respuesta sugerida como ejemplo válido.
+- Cada vez que respondes con `/reply ...`, se guarda tu versión humana como ejemplo prioritario.
+- El bridge reinyecta ejemplos recientes aprobados en el prompt del agente para que adopte tono y cadencia del despacho.
+- También actualiza el **stage de kanban** automáticamente:
+  - `fit_score >= 0.75` → `In Progress` (calificado)
+  - `fit_score <= 0.35` → `Done` (bajo fit)
+  - rango medio → `In Queue` hasta la primera respuesta, luego `In Progress`
+
+---
+
 ## Parte 2 — Configurar el Default Reply por canal
 
 Para asegurarte de que el flujo se activa en todos los canales:
@@ -162,21 +212,21 @@ Para asegurarte de que el flujo se activa en todos los canales:
 1. Ve a **Settings** (menú izquierdo) → **WhatsApp**.
 2. Despázate hasta la sección **Default Reply**.
 3. Haz clic en **Set Default Reply**.
-4. Selecciona el flujo `Superwave — Respuesta Automática`.
+4. Selecciona el flujo `Superwave — Lead Intake`.
 5. Haz clic en **Save**.
 
 ### Facebook Messenger
 
 1. Ve a **Settings** → **Messenger**.
 2. Busca **Default Reply**.
-3. Selecciona el flujo `Superwave — Respuesta Automática`.
+3. Selecciona el flujo `Superwave — Lead Intake`.
 4. Guarda.
 
 ### Instagram
 
 1. Ve a **Settings** → **Instagram**.
 2. Busca **Default Reply**.
-3. Selecciona el flujo `Superwave — Respuesta Automática`.
+3. Selecciona el flujo `Superwave — Lead Intake`.
 4. Guarda.
 
 ### TikTok
@@ -203,7 +253,7 @@ El Welcome Message se activa cuando alguien inicia una conversación por primera
    - `Mi aseguradora no paga`
    - `Quiero una cita`
    - `Ver información`
-5. Conecta cada botón al flujo `Superwave — Respuesta Automática` para que el mensaje del botón se procese normalmente.
+5. Conecta cada botón al flujo `Superwave — Lead Intake` para que el mensaje del botón se procese normalmente.
 
 ---
 
@@ -213,7 +263,8 @@ El Welcome Message se activa cuando alguien inicia una conversación por primera
 
 1. En el canvas del flujo, haz clic en **Preview** (botón superior derecho).
 2. ManyChat abrirá Messenger con el flujo activo.
-3. Escribe cualquier mensaje y verifica que el bot responda.
+3. Escribe cualquier mensaje y verifica que llegue el ACK.
+4. En Telegram, aprueba (`/approve`) o edita (`/reply`) y confirma que llegue la respuesta final al cliente.
 
 ### Prueba manual del webhook
 
@@ -241,10 +292,12 @@ Respuesta esperada:
     "messages": [
       {
         "type": "text",
-        "text": "Hola Juan, mucho gusto. Lamento mucho lo que estás pasando..."
+        "text": "Gracias por tu mensaje. Un asesor revisará tu caso y te responderá en breve."
       }
     ]
-  }
+  },
+  "review_id": "rvw_abc123...",
+  "classification": "consulta_legal"
 }
 ```
 
@@ -300,4 +353,6 @@ Al construir el body del External Request, estas son las variables más útiles:
 | Response body vacío | Error en el bridge | Revisa `docker compose logs bridge` para el detalle del error |
 | El Default Reply no se activa | Hay otro flujo con ese trigger | Elimina el Default Reply de otros flujos |
 | Tags no se asignan | ManyChat API key incorrecta o campos no creados | Corre `./setup-manychat.sh` y verifica `MANYCHAT_API_KEY` |
-| Mensajes no aparecen en Supabase | `SUPABASE_URL` o `SUPABASE_KEY` incorrectos | Verifica las variables y que corriste `supabase-migration.sql` |
+| No llega mensaje al canal de revisión Telegram | Webhook de Telegram no configurado o token incorrecto | Ejecuta `setWebhook` de la sección 1.6 y valida `TELEGRAM_WEBHOOK_*` |
+| Se aprueba en Telegram pero no responde al cliente | Error al enviar por ManyChat API | Revisa `docker compose logs bridge` y valida `MANYCHAT_API_KEY` + ventana de mensajería del canal |
+| No aparece lead en kanban | API del dashboard no disponible o objeto incorrecto | Verifica `KANBAN_API_BASE_URL`, `KANBAN_OBJECT_NAME` y que `web` esté healthy |

@@ -1,7 +1,7 @@
 {
   "name": "superwave-manychat-bridge",
-  "version": "2.1.0",
-  "description": "ManyChat bridge for ALA Legal — classification, PostgreSQL logging, ManyChat tagging, and Superwave agent forwarding",
+  "version": "3.0.0",
+  "description": "ManyChat bridge for ALA Legal — agent-first classification, kanban lead creation, Telegram approval, and delayed ManyChat replies",
   "main": "bridge.js",
   "private": true,
   "scripts": {

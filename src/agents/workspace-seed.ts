@@ -27,6 +27,36 @@ type SeedObject = {
 /** Fixed seed objects matching what's baked into assets/seed/workspace.duckdb. */
 const SEED_OBJECTS: SeedObject[] = [
   {
+    id: "seed_obj_lead_00000000000000",
+    name: "lead",
+    description: "ALA Legal intake pipeline",
+    icon: "briefcase",
+    defaultView: "kanban",
+    entryCount: 0,
+    fields: [
+      { name: "Full Name", type: "text", required: true },
+      { name: "Phone Number", type: "phone" },
+      { name: "Email Address", type: "email" },
+      {
+        name: "Status",
+        type: "enum",
+        enumValues: ["New Lead", "Contacted", "Qualified", "Proposal Sent", "Won", "Lost"],
+      },
+      {
+        name: "Source",
+        type: "enum",
+        enumValues: ["manychat", "instagram", "whatsapp", "messenger", "manual"],
+      },
+      { name: "Assigned To", type: "text" },
+      {
+        name: "Pillar",
+        type: "enum",
+        enumValues: ["fallecimientos", "lesiones", "aseguradoras", "litigios"],
+      },
+      { name: "Notes", type: "richtext" },
+    ],
+  },
+  {
     id: "seed_obj_people_00000000000000",
     name: "people",
     description: "Contact management",

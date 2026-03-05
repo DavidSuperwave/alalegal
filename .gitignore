@@ -24,3 +24,6 @@ bench-results/
 manychat-bridge/node_modules/
 manychat-bridge/test-e2e.js
 manychat-bridge/mock-agent.js
+
+# Per-client deployment secrets
+deploy/clients/*.env

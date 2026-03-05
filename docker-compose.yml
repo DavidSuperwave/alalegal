@@ -16,7 +16,7 @@ services:
   db:
     <<: *restart
     image: pgvector/pgvector:pg16
-    container_name: superwave-db
+    container_name: ${CLIENT_SLUG:-superwave}-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-superwave}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
@@ -34,7 +34,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: superwave-agent
+    container_name: ${CLIENT_SLUG:-superwave}-agent
     command: ["--no-onboard"]
     depends_on:
       db:
@@ -66,7 +66,7 @@ services:
     volumes:
       - ./SOUL.md:/app/SOUL.md:ro
     ports:
-      - "3000:3000"
+      - "${AGENT_GATEWAY_PORT:-3000}:3000"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
       interval: 15s
@@ -78,12 +78,12 @@ services:
     build:
       context: ./manychat-bridge
       dockerfile: Dockerfile
-    container_name: superwave-bridge
+    container_name: ${CLIENT_SLUG:-superwave}-bridge
     depends_on:
       db:
         condition: service_healthy
       agent:
-        condition: service_healthy
+        condition: service_started
     environment:
       MANYCHAT_API_KEY: ${MANYCHAT_API_KEY:?MANYCHAT_API_KEY is required}
       SUPERWAVE_WEBHOOK_URL: http://agent:8080/webhook
@@ -92,8 +92,26 @@ services:
       BRIDGE_PORT: 4000
       BRIDGE_SECRET: ${BRIDGE_SECRET:-}
       ADMIN_SECRET: ${ADMIN_SECRET:?ADMIN_SECRET is required}
+      MANYCHAT_ACK_TEXT: ${MANYCHAT_ACK_TEXT:-Gracias por tu mensaje. Un asesor revisará tu caso y te responderá en breve.}
+      AGENT_ANALYSIS_TIMEOUT_MS: ${AGENT_ANALYSIS_TIMEOUT_MS:-18000}
+      BRIDGE_DRY_RUN: ${BRIDGE_DRY_RUN:-false}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_REVIEW_CHAT_ID: ${TELEGRAM_REVIEW_CHAT_ID:-}
+      TELEGRAM_WEBHOOK_PATH_TOKEN: ${TELEGRAM_WEBHOOK_PATH_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-https://api.telegram.org}
+      TELEGRAM_AGENT_ASSIST_ENABLED: ${TELEGRAM_AGENT_ASSIST_ENABLED:-true}
+      TELEGRAM_AGENT_ASSIST_TIMEOUT_MS: ${TELEGRAM_AGENT_ASSIST_TIMEOUT_MS:-25000}
+      KANBAN_API_BASE_URL: ${KANBAN_API_BASE_URL:-http://web:3100}
+      KANBAN_OBJECT_NAME: ${KANBAN_OBJECT_NAME:-task}
+      KANBAN_DEFAULT_STATUS: ${KANBAN_DEFAULT_STATUS:-In Queue}
+      KANBAN_STAGE_NEW: ${KANBAN_STAGE_NEW:-In Queue}
+      KANBAN_STAGE_QUALIFIED: ${KANBAN_STAGE_QUALIFIED:-In Progress}
+      KANBAN_STAGE_ARCHIVE: ${KANBAN_STAGE_ARCHIVE:-Done}
+      FIT_SCORE_HIGH: ${FIT_SCORE_HIGH:-0.75}
+      FIT_SCORE_LOW: ${FIT_SCORE_LOW:-0.35}
     ports:
-      - "4000:4000"
+      - "${BRIDGE_PUBLIC_PORT:-4000}:4000"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health || exit 1"]
       interval: 15s
@@ -105,13 +123,15 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-    container_name: superwave-web
+    container_name: ${CLIENT_SLUG:-superwave}-web
     depends_on:
       agent:
         condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 3100
+      SUPERWAVE_STATE_DIR: /root/.superwave
+      OPENCLAW_STATE_DIR: /root/.superwave
       DATABASE_URL: postgres://${POSTGRES_USER:-superwave}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-superwave}
       LLM_BACKEND: openai_compatible
       LLM_MODEL: anthropic/claude-sonnet-4
@@ -124,8 +144,10 @@ services:
       SUPERWAVE_CLI_BIN: /usr/local/bin/superwave-agent
       SUPERWAVE_CHAT_WEBHOOK_URL: http://agent:8080/webhook
       SUPERWAVE_WEBHOOK_SECRET: ${SUPERWAVE_WEBHOOK_SECRET:?SUPERWAVE_WEBHOOK_SECRET is required}
+    volumes:
+      - web_state:/root/.superwave
     ports:
-      - "3100:3100"
+      - "${WEB_PUBLIC_PORT:-3100}:3100"
     healthcheck:
       test:
         - CMD-SHELL
@@ -136,4 +158,8 @@ services:
 
 volumes:
   db_data:
+    name: ${CLIENT_SLUG:-superwave}_db_data
+    driver: local
+  web_state:
+    name: ${CLIENT_SLUG:-superwave}_web_state
     driver: local
