@@ -3,7 +3,15 @@ alalegal.proyectoprisma.com {
     reverse_proxy localhost:4011
   }
 
+  handle /api/manychat/* {
+    reverse_proxy localhost:4011
+  }
+
   handle /telegram/* {
+    reverse_proxy localhost:4011
+  }
+
+  handle /api/telegram/* {
     reverse_proxy localhost:4011
   }
 

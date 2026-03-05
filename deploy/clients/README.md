@@ -76,3 +76,7 @@ curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook" \
 Configure ManyChat External Request to:
 
 `https://<client>.proyectoprisma.com/manychat/webhook`
+
+Compatibility alias (if a tool prepends `/api`):
+
+`https://<client>.proyectoprisma.com/api/manychat/webhook`

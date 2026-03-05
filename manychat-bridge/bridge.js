@@ -1362,6 +1362,20 @@ app.use((req, _res, next) => {
   next();
 });
 
+// Compatibility path rewrites:
+// - Some deployments route webhook URLs under /api/*.
+// - Normalize them to the canonical bridge paths to avoid 404s.
+app.use((req, _res, next) => {
+  if (typeof req.url === 'string') {
+    if (req.url.startsWith('/api/manychat/webhook')) {
+      req.url = req.url.replace('/api/manychat/webhook', '/manychat/webhook');
+    } else if (req.url.startsWith('/api/telegram/webhook/')) {
+      req.url = req.url.replace('/api/telegram/webhook', '/telegram/webhook');
+    }
+  }
+  next();
+});
+
 // ─── Webhook endpoint ─────────────────────────────────────────
 
 /**

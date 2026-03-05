@@ -128,6 +128,10 @@ curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook" \
   -d 'allowed_updates=["message","edited_message"]'
 ```
 
+Compatibility alias (also accepted):
+
+`https://<client>.proyectoprisma.com/api/telegram/webhook/<PATH_TOKEN>`
+
 ---
 
 ## 7) Configure ManyChat
@@ -138,6 +142,10 @@ In ManyChat External Request action:
 - Method: `POST`
 - `Content-Type: application/json`
 - Body uses subscriber + last_input fields
+
+Compatibility alias (also accepted):
+
+- URL: `https://<client>.proyectoprisma.com/api/manychat/webhook`
 
 Detailed flow mapping:
 

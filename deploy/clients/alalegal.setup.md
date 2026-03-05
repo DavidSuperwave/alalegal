@@ -61,6 +61,10 @@ In ManyChat External Request use:
 
 `https://alalegal.proyectoprisma.com/manychat/webhook`
 
+If a helper/tool already configured `/api/manychat/webhook`, it is now accepted too:
+
+`https://alalegal.proyectoprisma.com/api/manychat/webhook`
+
 ## 7) Smoke test
 
 ```bash

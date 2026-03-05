@@ -85,7 +85,15 @@ ${DOMAIN} {
     reverse_proxy localhost:${BRIDGE_PORT}
   }
 
+  handle /api/manychat/* {
+    reverse_proxy localhost:${BRIDGE_PORT}
+  }
+
   handle /telegram/* {
+    reverse_proxy localhost:${BRIDGE_PORT}
+  }
+
+  handle /api/telegram/* {
     reverse_proxy localhost:${BRIDGE_PORT}
   }
 
