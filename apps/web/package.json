@@ -33,6 +33,7 @@
     "@tiptap/starter-kit": "^3.19.0",
     "@tiptap/suggestion": "^3.19.0",
     "ai": "^6.0.73",
+    "chokidar": "^5.0.0",
     "clsx": "^2.1.1",
     "framer-motion": "^12.34.0",
     "fuse.js": "^7.1.0",
@@ -48,7 +49,8 @@
     "shiki": "^3.22.0",
     "tailwind-merge": "^3.5.0",
     "unicode-animations": "^1.0.3",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.8",
