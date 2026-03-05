@@ -55,6 +55,24 @@ type SeedObject = {
 
 const SEED_OBJECTS: SeedObject[] = [
   {
+    id: "seed_obj_lead_00000000000000",
+    name: "lead",
+    description: "ALA Legal intake pipeline",
+    icon: "briefcase",
+    defaultView: "kanban",
+    entryCount: 0,
+    fields: [
+      { name: "Full Name", type: "text", required: true },
+      { name: "Phone Number", type: "phone" },
+      { name: "Email Address", type: "email" },
+      { name: "Status", type: "enum", enumValues: ["New Lead", "Contacted", "Qualified", "Proposal Sent", "Won", "Lost"] },
+      { name: "Source", type: "enum", enumValues: ["manychat", "instagram", "whatsapp", "messenger", "manual"] },
+      { name: "Assigned To", type: "text" },
+      { name: "Pillar", type: "enum", enumValues: ["fallecimientos", "lesiones", "aseguradoras", "litigios"] },
+      { name: "Notes", type: "richtext" },
+    ],
+  },
+  {
     id: "seed_obj_people_00000000000000",
     name: "people",
     description: "Contact management",
@@ -242,10 +260,10 @@ function buildSeedSchemaSql(): string {
 
 function seedDuckDB(workspaceDir: string, projectRoot: string | null): boolean {
   const destPath = join(workspaceDir, "workspace.duckdb");
-  if (existsSync(destPath)) {return false;}
+  const dbAlreadyExists = existsSync(destPath);
 
   let seeded = false;
-  if (projectRoot) {
+  if (!dbAlreadyExists && projectRoot) {
     const seedDb = join(projectRoot, "assets", "seed", "workspace.duckdb");
     if (existsSync(seedDb)) {
       try {
@@ -257,13 +275,19 @@ function seedDuckDB(workspaceDir: string, projectRoot: string | null): boolean {
     }
   }
 
-  if (!seeded) {
+  if (!dbAlreadyExists && !seeded) {
     // Fallback for production images where the prebuilt seed DB is unavailable.
     if (!resolveDuckdbBin()) {return false;}
     seeded = duckdbExecOnFile(destPath, buildSeedSchemaSql());
   }
 
-  if (!seeded) {
+  if (!existsSync(destPath)) {
+    return false;
+  }
+
+  // Always upsert seed objects/fields/statuses so existing workspaces pick up
+  // newer native objects (e.g. "lead") without manual SQL.
+  if (resolveDuckdbBin() && !duckdbExecOnFile(destPath, buildSeedSchemaSql())) {
     return false;
   }
 
