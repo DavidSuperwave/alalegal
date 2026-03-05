@@ -18,6 +18,12 @@ cp deploy/clients/alalegal.env.template deploy/clients/<client>.env
 
 Set all required secrets in that file.
 
+> Single-client deployments can also use root `.env` (`/opt/ala-legal/.env`) with:
+>
+> `docker compose --env-file .env up -d --build`
+>
+> Multi-client deployments should prefer `deploy/clients/<client>.env` + `-p <client>`.
+
 For faster replication, use the scaffold script:
 
 ```bash
